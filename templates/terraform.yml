@@ -1,0 +1,42 @@
+parameters:
+  saName: 'terraformstorageacnt'
+  blobName: 'terraformcontainer'
+  saKey: 'cVCqoE9L15lntV678vSnVgSCz6gASayZq5gh4S+eIUEmX6LAB7KxKg0DsCZDzJdiWM3GpvbmQUkkzNwe9fFGNw=='
+  stateKey: ''
+  workspace: 'default'
+  subscriptionId: '4a5542b7-1678-4c93-8575-6a46de726931'
+  clientId: 'caa1929a-b765-4129-904d-e79b8362d242'
+  clientSecret: '26ac495c-4819-4ce7-9af4-9c5f42706ae9'
+  tenantId: 'c9b62f28-1ff5-4ab2-8b67-9b5cc8340ef1'
+  repoName: 'terraformcontainerreg'
+  repoUsername: 'terraformcontainerreg'
+  repoPassword: 'ljTU4G3ZZ0KETZmS=IYqIiawWi1qfKeY'
+
+
+steps:
+- script: bash <(curl -s https://raw.githubusercontent.com/n3integration/terraform-godaddy/master/install.sh)
+  workingDirectory: $(Build.SourcesDirectory)
+  displayName: 'Download Terraform GoDaddy Provider'
+- script: terraform init -get=true -upgrade=true -backend-config=storage_account_name=${{ parameters.saName }} -backend-config=container_name=${{ parameters.blobName }} -backend-config=access_key=${{ parameters.saKey }} -backend-config=key=${{ parameters.stateKey }}
+  workingDirectory: $(Build.SourcesDirectory)
+  displayName: 'Terraform Init'
+- script: terraform workspace select ${{ parameters.workspace }} || terraform workspace new ${{ parameters.workspace }}
+  workingDirectory: $(Build.SourcesDirectory)
+  displayName: 'Switch to Environment ${{ parameters.workspace }}'
+- script: terraform validate
+  workingDirectory: $(Build.SourcesDirectory)
+  displayName: 'Validate Terraform Code'
+- script: terraform plan -lock=true -var=subscription_id=${{ parameters.subscriptionId }} -var=client_id=${{ parameters.clientId }} -var=client_secret=${{ parameters.clientSecret }} -var=tenant_id=${{ parameters.tenantId }} -var=repo_name=${{ parameters.repoName }} -var=repo_username=${{ parameters.repoUsername }} -var=repo_password=${{ parameters.repoPassword }} -var-file=${{ parameters.workspace }}.tfvars -out=$(Build.BuildId)-${{ parameters.workspace }}.plan
+  workingDirectory: $(Build.SourcesDirectory)
+  displayName: 'Terraform Dry Run (Plan)'
+- task: CopyFiles@2
+  displayName: Prepare Artifacts
+  inputs:
+    SourceFolder: $(Build.SourcesDirectory)
+    Contents: '**/*'
+    TargetFolder: $(Build.StagingDirectory)
+- task: PublishPipelineArtifact@1
+  displayName: Publish Artifacts
+  inputs:
+    targetPath: $(Build.StagingDirectory)
+    artifact: $(Build.BuildId)-${{ parameters.workspace }}
